@@ -1,12 +1,12 @@
 # Body Performance Data Analysis Project
 
-## 📊 Project Overview
+## �� Project Overview
 
 This project focuses on analyzing body performance data to classify individuals into different performance categories (A, B, C, D) based on various physical and health metrics. The analysis employs exploratory data analysis (EDA), statistical modeling, and machine learning techniques to understand the factors influencing body performance.
 
 **Date:** January 8, 2025
 
-## 📁 Project Structure
+## �� Project Structure
 
 ```
 Statistical processing/
@@ -18,27 +18,27 @@ Statistical processing/
 └── README.md                   
 ```
 
-## 📈 Dataset Description
+## �� Dataset Description
 
 The `bodyPerformance.csv` dataset contains 13,395 records with the following variables:
 
 ### Features:
 - **age** - Age of the individual
 - **gender** - Gender (M/F)
-- **height_cm** - Height in centimeters
-- **weight_kg** - Weight in kilograms
-- **body fat_%** - Body fat percentage
+- **heightcm** - Height in centimeters
+- **weightkg** - Weight in kilograms
+- **body fat%** - Body fat percentage
 - **diastolic** - Diastolic blood pressure
 - **systolic** - Systolic blood pressure
 - **gripForce** - Grip force measurement
-- **sit and bend forward_cm** - Flexibility test result
+- **sit and bend forwardcm** - Flexibility test result
 - **sit-ups counts** - Number of sit-ups completed
-- **broad jump_cm** - Broad jump distance in centimeters
+- **broad jumpcm** - Broad jump distance in centimeters
 
 ### Target Variable:
 - **class** - Performance classification (A, B, C, D)
 
-## 🔬 Methodology
+## �� Methodology
 
 ### 1. Exploratory Data Analysis (EDA)
 
@@ -81,7 +81,7 @@ The `bodyPerformance.csv` dataset contains 13,395 records with the following var
 ### 2. Feature Engineering
 
 #### 2.1 Derived Variables
-- **BMI Calculation**: `BMI = weight_kg / (height_cm/100)²`
+- **BMI Calculation**: `BMI = weightkg / (heightcm/100)²`
 - **MAP Calculation**: `MAP = diastolic + (systolic - diastolic) / 3`
 - **Age Grouping**: Categorical age groups (21-32, 33-44, 45-56, 56-64)
 - **BMI Status Classification**:
@@ -174,7 +174,7 @@ The `bodyPerformance.csv` dataset contains 13,395 records with the following var
 - **Physical Metrics**: Gender differences in grip force, flexibility, and endurance
 - **Health Indicators**: Gender-specific health metric distributions
 
-## 🛠️ Technical Requirements
+## ��️ Technical Requirements
 
 ### R Packages Used:
 ```r
@@ -208,7 +208,7 @@ library(car)
 library(FSA)
 ```
 
-## 📖 How to Use
+## �� How to Use
 
 ### Prerequisites
 - **R** (version 4.0 or higher)
@@ -246,7 +246,7 @@ library(FSA)
 - **Memory Issues**: For large datasets, ensure sufficient RAM (4GB+ recommended)
 - **Encoding Issues**: Use `locale(encoding="latin1")` for proper character encoding
 
-## 📊 Key Findings
+## �� Key Findings
 
 ### Performance Classification Insights
 - **Class Distribution**: Analysis of performance categories A, B, C, D across different demographics
@@ -271,14 +271,14 @@ library(FSA)
 - **Cross-validation**: Model robustness assessment
 - **Confusion Matrix Analysis**: Detailed classification accuracy by performance category
 
-## 🔍 Data Quality
+## �� Data Quality
 
 - **Dataset Size**: 13,395 records
 - **Missing Values**: Analyzed and handled appropriately
 - **Data Types**: Mixed (numeric and categorical)
 - **Class Distribution**: Balanced through sampling techniques
 
-## 📝 Notes
+## �� Notes
 
 ### Analysis Characteristics
 - **Bilingual Documentation**: Analysis includes both Vietnamese and English comments for accessibility
@@ -298,11 +298,11 @@ library(FSA)
 - **Demographic Analysis**: Insights into age and gender-based performance patterns
 - **Educational Tool**: Comprehensive example of statistical analysis workflow
 
-## 📄 License
+## �� License
 
 This project is for educational and research purposes.
 
-## 📚 Additional Resources
+## �� Additional Resources
 
 ### Documentation Files
 - **R Markdown**: `Statistical processing.rmd` - Complete analysis code and documentation
@@ -323,6 +323,4 @@ For questions about this analysis or collaboration opportunities, please contact
 **Last Updated**: January 8, 2025  
 **Project Status**: Complete  
 **Analysis Type**: Statistical Classification and Prediction
-#   S t a t i t i c a l P r o c e s s i n g 
- 
- 
+#
