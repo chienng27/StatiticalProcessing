@@ -1,0 +1,844 @@
+---
+title: "Project 3 - Body performance Data"
+author: "Nhom22:
+Vũ Xuân Hiệp-22110060
+Trần Duy An-22110007
+Phạm Xuân Bách-22110021
+Nguyễn Tất Chiến-22110028
+Phạm Thái Thiên An-22110005"
+date: "2025-01-08"
+output: html_document
+---
+
+# "Project 3 - Body performance Data"
+
+## 1. EDA
+
+### a.Import các thư viện
+```{r}
+#update.packages('rsample')
+```
+
+```{r}
+library(boot)
+library(rsample)
+library(tidyverse)
+library(matrixStats)
+library(lubridate)
+library(janitor)
+library(ggplot2)
+library(corrplot)
+library(dplyr)
+library(splines2)
+library(mgcv)
+library(mgcViz)
+library(leaps)
+library(gridExtra)
+library(grid)
+library(MASS)
+library(leaps)
+library(lmPerm)
+library(corrplot)
+library(DataExplorer)
+library(caret)
+library(mgcv)
+library(mgcViz)
+library(splines)
+library(lmPerm)
+library(ggridges)
+library(ggbeeswarm)
+library(gridExtra)
+library(readr)
+library(randomForest)
+library(dplyr)
+library(VIM)
+library(knitr)
+library(car)
+library(FSA)
+```
+
+### b.Đọc dữ liệu
+
+```{r}
+locale=locale(encoding="latin1")
+data <- read_csv(file = "bodyPerformance.csv", locale = locale)
+head(data)
+data <- data |> janitor::clean_names()
+glimpse(data)
+data2 <- data
+```
+
+### c.EDA:
+
+## i.Bảng tổng hợp dữ liệu:
+### Phân tích dữ liệu thăm dò & kiểm tra cấu trúc của tập dữ liệu
+```{r}
+str(data)
+```
+### Hiển thị một vài hàng đầu tiên của tập dữ liệu
+```{r}
+head(data)
+```
+### Kiểm tra phần trăm bị khuyết trong dữ liệu
+```{r}
+aggr(data, ylab = c("Proportion of missings", "Pattern"), number = TRUE,
+cex.axis = 0.4, cex.numbers = 0.5)
+```
+
+### Kết quả tổng hợp
+```{r}
+summary(data)
+```
+
+## ii.Xử lí dữ liệu:
+
+### Kiểm tra tổng thể dữ liệu
+
+```{r}
+# Hàm để lấy thông tin dữ liệu bao gồm loại dữ liệu, giá trị duy nhất,và giá trị null
+datainfo <- function(data) {
+# Tạo một khung dữ liệu để lưu trữ thông tin
+temp_ps <- data.frame(matrix(ncol = 6, nrow = ncol(data)))
+colnames(temp_ps) <- c("Column_Name", "DataType",
+"Non_null_Values", "Unique_Values", "NaN_Values_Percentage",
+"Duplicates")
+# Điền thông tin vào khung dữ liệu
+temp_ps$Column_Name <- colnames(data) # Lấy tên các cột
+temp_ps$DataType <- sapply(data, class) # Lấy loại dữ liệu sử dụng
+sapply
+temp_ps$Non_null_Values <- sapply(data, function(x)
+sum(!is.na(x))) # Đếm số giá trị không null sử dụng sapply và is.na
+temp_ps$Unique_Values <- sapply(data, function(x)
+length(unique(na.omit(x)))) # Đếm số giá trị duy nhất loại bỏ các giá trị NA
+temp_ps$NaN_Values <- sapply(data, function(x) sum(is.na(x))) #Đếm số giá trị null sử dụng sapply và is.na
+temp_ps$NaN_Values_Percentage <- (temp_ps$NaN_Values /
+nrow(data)) * 100 # Tính tỷ lệ phần trăm của các giá trị null
+# Đếm số lượng bản ghi bị trùng lặp trong dữ liệu
+temp_ps$Duplicates <- sum(duplicated(data))
+# Trả về khung dữ liệu chứa thông tin
+return(temp_ps)
+}
+data_info <- datainfo(data)
+print(data_info)
+```
+
+=> Bộ dữ liệu không chứa NaN
+
+### Kiểm tra giá trị bất hợp lý (giá trị = 0) trong các cột cần loại bỏ
+```{r}
+invalid_rows <- with(data, 
+                     diastolic == 0 | 
+                     systolic == 0 | 
+                     grip_force == 0 | 
+                     sit_and_bend_forward_cm == 0 | 
+                     sit_ups_counts == 0 | 
+                     broad_jump_cm == 0)
+```
+### Loại bỏ các hàng có giá trị bất hợp lý
+```{r}
+data1 <- data[!invalid_rows, ]
+```
+### Xem kích thước dữ liệu trước và sau khi làm sạch
+```{r}
+cat("Số hàng trước khi làm sạch:", nrow(data), "\n")
+cat("Số hàng sau khi làm sạch:", nrow(data1), "\n")
+```
+### Kiểm tra hàm class với avg_grip_force và total_sit_ups
+```{r}
+result <- data1 %>%
+  group_by(class) %>%
+  summarise(
+    avg_grip_force = mean(grip_force, na.rm = TRUE),
+    total_sit_ups = sum(sit_ups_counts, na.rm = TRUE)
+  ) %>%
+  arrange(desc(avg_grip_force)) %>%
+  ungroup()
+
+print(result)
+```
+### Chuyển đổi kiểu dữ liệu cho các biến class, gender
+```{r}
+data <- data1 |> mutate(
+  gender = as.factor(gender),
+  class = as.factor(class)
+)
+data
+```
+
+```{r}
+summary(data$class)
+```
+```{r}
+summary(data$gender)
+```
+
+## iii.Trực quan dữ liệu:
+### histogram cho tất cả các biến định lượng
+```{r, fig.width=12, fig.height=8}
+# Xác định các cột định lượng
+num_cols <- unlist(lapply(data, is.numeric))         # Lọc cột số
+data_num <- data[, num_cols]                        # Chỉ giữ các cột định lượng
+
+# Đặt tên cột dễ đọc hơn (nếu cần)
+colnames(data_num) <- c('Age', 'Height (cm)', 'Weight (kg)', 'Body fat (%)', 
+                        'Diastolic', 'Systolic', 'Grip force', 
+                        'Sit and bend forward (cm)', 'Sit-up counts', 'Broad jump (cm)')
+
+# Vẽ histogram cho từng biến định lượng trong cùng một khung hình
+par(mfrow = c(3, 4))  # Chia khung hình thành 3 hàng và 4 cột
+for (i in 1:ncol(data_num)) {
+  hist(data_num[[i]], 
+       main = colnames(data_num)[i], 
+       xlab = colnames(data_num)[i], 
+       col = 'skyblue', 
+       border = 'black',
+       breaks = 20)
+}
+```
+
+### Vẽ biểu đồ barchart so sánh số lượng phần tử trong nhóm theo giới tính
+```{r}
+ggplot(data, aes(x = class, fill = gender)) +
+  geom_bar(position = "dodge") +  # Dùng geom_bar để vẽ biểu đồ cột, "dodge" giúp các cột cạnh nhau
+  scale_x_discrete(limits = c("A", "B", "C", "D")) +  # Đảm bảo thứ tự của các nhóm
+  scale_fill_manual(values = c("blue", "pink")) +  # Chọn màu cho giới tính nam (blue) và nữ (pink)
+  theme_minimal() +  # Dùng theme tối giản
+  labs(
+    x = "Class",  # Nhãn trục x
+    y = "Count",  # Nhãn trục y (số lượng)
+    title = "Comparison of Number of Elements by Class and Gender"  # Tiêu đề
+  )
+```
+=>Số lượng Nam giới đạt nhóm A còn thấp so với các nhóm khác, trong khi đó số lượng Nữ giới đạt nhóm A cao nhất.
+
+#Tạo hàm Tính BMI và MAP
+```{r}
+calculate_bmi <- function(weight, height) {
+  # Đảm bảo chiều cao được chuyển đổi sang mét
+  height_m <- height / 100
+
+  # Tính toán BMI
+  bmi <- weight / height_m^2
+
+  return(bmi)
+}
+calculate_map <- function(data, diastolic, systolic) {
+  # Kiểm tra các cột có tồn tại trong dữ liệu
+  if (!(diastolic %in% names(data)) || !(systolic %in% names(data))) {
+    stop("Cột diastolic hoặc systolic không tồn tại trong dữ liệu.")
+  }
+
+  # Tính MAP và thêm cột mới vào dataframe
+  data$MAP <- data[[diastolic]] + (data[[systolic]] - data[[diastolic]]) / 3
+  return(data)
+}
+```
+
+```{r}
+
+```
+
+### Hàm để loại bỏ giá trị ngoại lai dựa trên IQR và Tính toán BMI
+```{r pressure}
+remove_outliers <- function(df, cols) {
+  for (col in cols) {
+    if (is.numeric(df[[col]])) {
+      Q1 <- quantile(df[[col]], 0.25, na.rm = TRUE) # Quartile 1
+      Q3 <- quantile(df[[col]], 0.75, na.rm = TRUE) # Quartile 3
+      IQR <- Q3 - Q1 # Interquartile Range
+      lower_bound <- Q1 - 1.5 * IQR
+      upper_bound <- Q3 + 1.5 * IQR
+      # Giữ lại các giá trị không phải ngoại lai
+      df <- df[df[[col]] >= lower_bound & df[[col]] <= upper_bound, ]
+    }
+  }
+  return(df)
+}
+
+# Xác định các cột số
+numeric_cols <- sapply(data, is.numeric)
+
+# Loại bỏ giá trị ngoại lai
+data_cleaned <- remove_outliers(data, names(data)[numeric_cols])
+data_cleaned
+max_value <- max(data$age)
+min_value <- min(data$age)
+
+print(max_value)
+print(min_value)
+
+data_cleaned$age_group <- cut(data_cleaned$age, 
+                      breaks = c(21, 30, 40, 50, 64), 
+                      labels = c("21-32","33-44", "45-56",D= "56-64"), 
+                      right = TRUE, 
+                      include.lowest = TRUE)
+
+data_cleaned$BMI <- calculate_bmi(data_cleaned$weight_kg, data_cleaned$height_cm)
+
+```
+```{r}
+summary(data_cleaned$class)
+```
+### Chỉ số cơ thể và Chỉ số thể chất
+```{r}
+data_cleaned$BMI <- calculate_bmi(data_cleaned$weight_kg, data_cleaned$height_cm)
+par(mfrow = c(2, 2),mar = c(5, 4, 2, 1),mgp = c(3, 1, 0),oma = c(0, 0, 3, 0))
+boxplot(BMI ~ age_group, data = data_cleaned, col = rainbow(4), main = "BMI",cex.axis = 0.8)
+boxplot(diastolic ~ age_group, data = data_cleaned, col = rainbow(4), main = "Diastolic",cex.axis = 0.8)
+boxplot(systolic ~ age_group, data = data_cleaned, col = rainbow(4), main = "Systolic",cex.axis = 0.8)
+boxplot(body_fat_percent ~ age_group, data = data_cleaned, col = rainbow(4), main = "Body fat",cex.axis = 0.8)
+mtext("Chỉ số cơ thể", 
+      outer = TRUE, line = 1, cex = 1.5)
+
+par(mfrow = c(2, 2),mar = c(5, 4, 2, 1),mgp = c(3, 1, 0),oma = c(0, 0, 3, 0))
+boxplot(grip_force ~ age_group, data = data_cleaned, col = rainbow(4), main = "Grip Force",cex.axis = 0.8)
+boxplot(broad_jump_cm ~ age_group, data = data_cleaned, col = rainbow(4), main = "Broad Jump",cex.axis = 0.8)
+boxplot(sit_ups_counts ~ age_group, data = data_cleaned, col = rainbow(4), main = "Sit-ups Counts",cex.axis = 0.8)
+boxplot(sit_and_bend_forward_cm ~ age_group, data = data_cleaned, col = rainbow(4), main = "Sit and Bend Forward_cm",cex.axis = 0.8)
+mtext("Chỉ số thể chất", 
+      outer = TRUE, line = 1, cex = 1.5)
+```
+
+```{r}
+
+par(mfrow = c(2, 2),mar = c(5, 4, 2, 1),mgp = c(3, 1, 0),oma = c(0, 0, 3, 0))
+boxplot(BMI ~ class, data = data_cleaned, col = rainbow(4), main = "BMI",cex.axis = 0.8)
+boxplot(diastolic ~ class, data = data_cleaned, col = rainbow(4), main = "Diastolic",cex.axis = 0.8)
+boxplot(systolic ~ class, data = data_cleaned, col = rainbow(4), main = "Systolic",cex.axis = 0.8)
+boxplot(body_fat_percent ~ class, data = data_cleaned, col = rainbow(4), main = "Body fat",cex.axis = 0.8)
+mtext("Chỉ số cơ thể theo hiệu suất ", 
+      outer = TRUE, line = 1, cex = 1.5)
+
+par(mfrow = c(2, 2),mar = c(5, 4, 2, 1),mgp = c(3, 1, 0),oma = c(0, 0, 3, 0))
+boxplot(grip_force ~ class, data = data_cleaned, col = rainbow(4), main = "Grip Force",cex.axis = 0.8)
+boxplot(broad_jump_cm ~ class, data = data_cleaned, col = rainbow(4), main = "Broad Jump",cex.axis = 0.8)
+boxplot(sit_ups_counts ~ class, data = data_cleaned, col = rainbow(4), main = "Sit-ups Counts",cex.axis = 0.8)
+boxplot(sit_and_bend_forward_cm ~ class, data = data_cleaned, col = rainbow(4), main = "Sit and Bend Forward_cm",cex.axis = 0.8)
+mtext("Chỉ số thể chất theo hiệu suất", 
+      outer = TRUE, line = 1, cex = 1.5)
+
+```
+```{r}
+par(mfrow = c(2, 2),mar = c(5, 4, 2, 1),mgp = c(3, 1, 0),oma = c(0, 0, 3, 0))
+boxplot(BMI ~ gender, data = data_cleaned, col = rainbow(4), main = "BMI",cex.axis = 0.8)
+boxplot(diastolic ~ gender, data = data_cleaned, col = rainbow(4), main = "Diastolic",cex.axis = 0.8)
+boxplot(systolic ~ gender, data = data_cleaned, col = rainbow(4), main = "Systolic",cex.axis = 0.8)
+boxplot(body_fat_percent ~ gender, data = data_cleaned, col = rainbow(4), main = "Body fat",cex.axis = 0.8)
+mtext("Chỉ số cơ thể theo giới tinh ", 
+      outer = TRUE, line = 1, cex = 1.5)
+
+par(mfrow = c(2, 2),mar = c(5, 4, 2, 1),mgp = c(3, 1, 0),oma = c(0, 0, 3, 0))
+boxplot(grip_force ~ gender, data = data_cleaned, col = rainbow(4), main = "Grip Force",cex.axis = 0.8)
+boxplot(broad_jump_cm ~ gender, data = data_cleaned, col = rainbow(4), main = "Broad Jump",cex.axis = 0.8)
+boxplot(sit_ups_counts ~ gender, data = data_cleaned, col = rainbow(4), main = "Sit-ups Counts",cex.axis = 0.8)
+boxplot(sit_and_bend_forward_cm ~ gender, data = data_cleaned, col = rainbow(4), main = "Sit and Bend Forward_cm",cex.axis = 0.8)
+mtext("Chỉ số thể chất theo giới tính", 
+      outer = TRUE, line = 1, cex = 1.5)
+```
+### Ma trận tương quan
+```{r}
+numeric_data <- data_cleaned[, sapply(data_cleaned, is.numeric)]
+# Tính ma trận tương quan Pearson
+cor_matrix <- cor(numeric_data, use = "complete.obs", method = "pearson") 
+
+# In ma trận tương quan
+print(cor_matrix)
+
+data_unique<- unique(cor_matrix)
+print(data_unique)
+corrplot(cor_matrix, method = "shade", tl.cex = 0.5)
+
+# Lấy chỉ số các ô có giá trị lớn hơn 0.5
+greater_than_0.5 <- which(cor_matrix > 0.6, arr.ind = TRUE)
+
+# Lấy chỉ số các ô có giá trị nhỏ hơn -0.5
+less_than_neg_0.5 <- which(cor_matrix < -0.6, arr.ind = TRUE)
+
+# Tạo danh sách các mối quan hệ thỏa điều kiện
+greater_than_0.5_pairs <- data.frame(
+  bienthunhat = rownames(cor_matrix)[greater_than_0.5[, 1]],
+  bienthuhai = colnames(cor_matrix)[greater_than_0.5[, 2]],
+  Correlation = cor_matrix[greater_than_0.5]
+)
+
+less_than_neg_0.5_pairs <- data.frame(
+  bienthunhat = rownames(cor_matrix)[less_than_neg_0.5[, 1]],
+  bienthuhai = colnames(cor_matrix)[less_than_neg_0.5[, 2]],
+  Correlation = cor_matrix[less_than_neg_0.5]
+)
+
+# In kết quả
+cat("Các cặp biến có tương quan > 0.5:\n")
+print(greater_than_0.5_pairs)
+
+cat("\nCác cặp biến có tương quan < -0.5:\n")
+print(less_than_neg_0.5_pairs)
+```
+
+### Một số biểu đồ khác
+```{r}
+ggplot(data_cleaned, aes(x = height_cm, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "Height of class", x = "Height", y = "Class") +
+  scale_fill_brewer(palette = "Set2") +
+   theme(
+    strip.text = element_text(size = 12),  # Tăng kích thước nhãn facet
+    axis.text = element_text(size = 10),   # Tăng kích thước chữ trục
+    legend.text = element_text(size = 10) # Tăng kích thước chữ chú thích
+  )
+
+ggplot(data_cleaned, aes(x = weight_kg, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "Weight of class", x = "Weight", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = body_fat_percent, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "body fat of class", x = "body fat", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = diastolic, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "diastolic of class", x = "diastolic", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = systolic, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "Systolic of class", x = "systolic", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = grip_force, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "GripForce of class", x = "systolic", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = sit_and_bend_forward_cm, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "Sit and bend forward of class", x = "Sit and bend forward", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = sit_ups_counts, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "Sit ups counts of class", x = "Sit and bend forward", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = broad_jump_cm, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "Broad jump of class", x = "Sit and bend forward", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = BMI, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "BMI of class", x = "BMI", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = age, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "Age of class", x = "BMI", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(data_cleaned, aes(x = gender, y = class, fill = class)) +
+  geom_density_ridges(alpha = 0.8) +
+  theme_minimal() +
+  labs(title = "Gender of class", x = "Gender", y = "Class") +
+  scale_fill_brewer(palette = "Set2")
+
+
+```
+## iv Bảng tổng hợp số liệu
+### 1. Tổng hợp theo Giới tính (gender)
+```{r}
+summary_gender <- data_cleaned %>%
+  group_by(gender) %>%
+  summarize(
+    total_grip_force = sum(grip_force, na.rm = TRUE),
+    mean_grip_force = mean(grip_force, na.rm = TRUE),
+    median_grip_force = median(grip_force, na.rm = TRUE),
+    max_grip_force = max(grip_force, na.rm = TRUE),
+    min_grip_force = min(grip_force, na.rm = TRUE)
+  )
+print(summary_gender)
+```
+Kết quả sẽ giúp so sánh hiệu suất lực tay giữa giới tính nam và nữ.
+### 2. Tổng hợp theo Loại Hiệu Suất (class)
+```{r}
+summary_class <- data_cleaned %>%
+  group_by(class) %>%
+  summarize(
+    total_grip_force = sum(grip_force, na.rm = TRUE),
+    mean_grip_force = mean(grip_force, na.rm = TRUE),
+    median_grip_force = median(grip_force, na.rm = TRUE),
+    max_grip_force = max(grip_force, na.rm = TRUE),
+    min_grip_force = min(grip_force, na.rm = TRUE)
+  )
+print(summary_class)
+```
+Giúp xác định nhóm hiệu suất nào có giá trị lực tay cao hơn.
+### 3. Tổng hợp theo Nhóm Tuổi
+```{r}
+data_cleaned$age_group <- cut(data_cleaned$age, breaks = c(21, 32, 44, 56, 65), right = FALSE)
+
+summary_age_group <- data_cleaned %>%
+  group_by(age_group) %>%
+  summarize(
+    total_grip_force = sum(grip_force, na.rm = TRUE),
+    mean_grip_force = mean(grip_force, na.rm = TRUE),
+    median_grip_force = median(grip_force, na.rm = TRUE),
+    max_grip_force = max(grip_force, na.rm = TRUE),
+    min_grip_force = min(grip_force, na.rm = TRUE)
+  )
+print(summary_age_group)
+```
+Kết quả sẽ cho biết nhóm tuổi nào có lực tay cao hơn, giúp hiểu rõ hiệu suất giữa các nhóm tuổi.
+### 4. Tổng hợp theo Chỉ Số Mỡ Cơ Thể (bodyFat)
+```{r}
+data_cleaned$body_fat_group <- cut(data_cleaned$body_fat_percent, breaks = c(0, 15, 25, 100), right = FALSE, labels = c("<15%", "15–25%", ">25%"))
+
+summary_body_fat <- data_cleaned %>%
+  group_by(body_fat_group) %>%
+  summarize(
+    total_grip_force = sum(grip_force, na.rm = TRUE),
+    mean_grip_force = mean(grip_force, na.rm = TRUE),
+    median_grip_force = median(grip_force, na.rm = TRUE),
+    max_grip_force = max(grip_force, na.rm = TRUE),
+    min_grip_force = min(grip_force, na.rm = TRUE)
+  )
+print(summary_body_fat)
+```
+Phân tích này cho thấy mối quan hệ giữa chỉ số mỡ cơ thể và lực tay.
+### 5. Tổng hợp theo Chiều Cao (height)
+```{r}
+data_cleaned$height_group <- cut(data_cleaned$height_cm, breaks = c(140, 160, 170, 200), right = FALSE, labels = c("<160 cm", "160–170 cm", ">170 cm"))
+
+summary_height <- data_cleaned %>%
+  group_by(height_group) %>%
+  summarize(
+    total_grip_force = sum(grip_force, na.rm = TRUE),
+    mean_grip_force = mean(grip_force, na.rm = TRUE),
+    median_grip_force = median(grip_force, na.rm = TRUE),
+    max_grip_force = max(grip_force, na.rm = TRUE),
+    min_grip_force = min(grip_force, na.rm = TRUE)
+  )
+print(summary_height)
+```
+Giúp hiểu mối quan hệ giữa chiều cao và lực tay.
+### 6.Tổng hợp nhịp tim (diastolic) theo class
+```{r}
+summary_diastolic <- data_cleaned %>%
+  group_by(class) %>%
+  summarize(
+    total_diastolic = sum(diastolic, na.rm = TRUE),  # Tổng nhịp tim
+    mean_diastolic = mean(diastolic, na.rm = TRUE),  # Nhịp tim trung bình
+    median_diastolic = median(diastolic, na.rm = TRUE),  # Trung vị nhịp tim
+    max_diastolic = max(diastolic, na.rm = TRUE),  # Nhịp tim lớn nhất
+    min_diastolic = min(diastolic, na.rm = TRUE)   # Nhịp tim nhỏ nhất
+  )
+
+# Hiển thị bảng tổng hợp
+print(summary_diastolic)
+```
+### 7.Tổng hợp nhịp tim (systolic) theo class
+```{r}
+summary_systolic <- data_cleaned %>%
+  group_by(class) %>%
+  summarize(
+    total_systolic = sum(systolic, na.rm = TRUE),  # Tổng nhịp tim
+    mean_systolic = mean(systolic, na.rm = TRUE),  # Nhịp tim trung bình
+    median_systolic = median(systolic, na.rm = TRUE),  # Trung vị nhịp tim
+    max_systolic = max(systolic, na.rm = TRUE),  # Nhịp tim lớn nhất
+    min_systolic = min(systolic, na.rm = TRUE)   # Nhịp tim nhỏ nhất
+  )
+
+# Hiển thị bảng tổng hợp
+print(summary_systolic)
+```
+Các bảng tổng hợp này sẽ cung cấp một cái nhìn tổng quan và chi tiết về các yếu tố ảnh hưởng đến lực tay và hiệu suất cơ thể trong tập dữ liệu bodyPerformance.csv
+## v.A/B Testing:
+### Kiểm định ANOVA cho từng biến tuân theo phân phối chuẩn
+Ta thực hiện kiểm định ANOVA cho từng biến tuân theo phân phối chuẩn.
+```{r}
+data2$BMI <- calculate_bmi(data2$weight_kg, data2$height_cm)
+data2 <- calculate_map(data2, "diastolic", "systolic")
+# Thực hiện ANOVA cho từng biến
+anova_test <- function(var, data2) {
+  formula <- as.formula(paste(var, "~ class"))
+  model <- aov(formula, data = data2)
+  result <- summary(model)
+  return(result[[1]][["Pr(>F)"]][1]) # Trích xuất p-value
+}
+
+# Các biến dự đoán
+numerical_vars <- c("BMI","MAP", "broad_jump_cm")
+
+# Lặp qua các biến và thu thập p-value
+anova_results <- sapply(numerical_vars, function(var) anova_test(var, data2))
+
+# Xuất kết quả ANOVA dưới dạng bảng
+print(anova_results, caption = "Kết quả ANOVA cho các biến dự đoán")
+```
+
+###Giả thuyết kiểm định cho từng cặp nhóm không theo phân phối chuẩn
+#### Age
+```{r}
+# Thực hiện Dunn Test
+dunn_test <- dunnTest(age ~ class, data = data2, method = "bonferroni")
+
+# Hiển thị kết quả
+print(dunn_test)
+```
+```{r}
+# Thực hiện Dunn Test
+dunn_test <- dunnTest(body_fat_percent ~ class, data = data2, method = "bonferroni")
+
+# Hiển thị kết quả
+print(dunn_test)
+```
+```{r}
+# Thực hiện Dunn Test
+dunn_test <- dunnTest(grip_force ~ class, data = data2, method = "bonferroni")
+
+# Hiển thị kết quả
+print(dunn_test)
+
+```
+```{r}
+# Thực hiện Dunn Test
+dunn_test <- dunnTest(sit_and_bend_forward_cm ~ class, data = data2, method = "bonferroni")
+
+# Hiển thị kết quả
+print(dunn_test)
+```
+```{r}
+# Thực hiện Dunn Test
+dunn_test <- dunnTest(sit_ups_counts ~ class, data = data2, method = "bonferroni")
+
+# Hiển thị kết quả
+print(dunn_test)
+```
+
+```{r}
+table_data <- table(data2$class, data2$gender)
+
+chisq_test_result <- chisq.test(table_data)
+print(chisq_test_result)
+```
+### Để giúp cho các chuyên gia sức khỏe biết được hiệu quả của việc tập thể dục, nhóm em có 1 vài nhận xét như sau:
+
+```{r}
+# Vẽ boxplot
+# Chia độ tuổi thành nhóm
+data2 <- data2 %>%
+  mutate(age_group = cut(age, breaks = c(20, 30, 40, 50, 60,70),
+                        labels = c("20-30", "30-40", "40-50", "50-60","60-70"),
+                        right = FALSE))
+```
+
+So sánh chỉ số body_fat_percent của từng nhóm tuổi
+```{r}
+# Vẽ boxplot
+ggplot(data2, aes(x = age_group, y = body_fat_percent , fill = class)) +
+  geom_boxplot(alpha = 0.7, width = 0.6) +  # Vẽ hộp
+  labs(title = "Boxplot: Body_fat_percent by Age Group and Class",
+       x = "Age Group",
+       y = "Body_fat_percent") +
+  scale_fill_manual(values = c("lightblue", "lightgreen", "lightpink", "lightyellow")) +  # Màu sắc cho các class
+  theme_minimal()
+```
+
+###So sánh chỉ số BMI của từng nhóm tuổi
+```{r}
+# Vẽ boxplot
+ggplot(data2, aes(x = age_group, y =BMI , fill = class)) +
+  geom_boxplot(alpha = 0.7, width = 0.6) +  # Vẽ hộp
+  labs(title = "Boxplot: BMI by Age Group and Class",
+       x = "Age Group",
+       y = "BMI") +
+  scale_fill_manual(values = c("lightblue", "lightgreen", "lightpink", "lightyellow")) +  # Màu sắc cho các class
+  theme_minimal()
+```
+
+### Nhận xét chỉ số MAP của từng nhóm tuổi.
+```{r}
+# Vẽ boxplot
+ggplot(data2, aes(x = age_group, y =MAP , fill = class)) +
+  geom_boxplot(alpha = 0.7, width = 0.6) +  # Vẽ hộp
+  labs(title = "Boxplot: MAP by Age Group and Class",
+       x = "Age Group",
+       y = "MAP") +
+  scale_fill_manual(values = c("lightblue", "lightgreen", "lightpink", "lightyellow")) +  # Màu sắc cho các class
+  theme_minimal()
+```
+
+## vi. Model
+
+```{r}
+#create function
+convert_bmi <- function(y){
+    if(y < 18.5){
+      y <- "Underweight"
+    }else
+      if(y >= 18.5 & y < 25){
+      y <- "Healthy"
+    }else
+      if(y >= 25 & y < 29.9){
+      y <- "Overweight"
+    }else{
+      y <- "Obese"
+    } 
+}
+```
+
+```{r}
+data_cleaned$BMI_status <- sapply (data_cleaned$BMI,
+                                  FUN = convert_bmi)
+```
+
+```{r}
+#To check wether the BMI status classification is correct or wrong.
+data_cleaned %>% 
+  ggplot(aes(BMI_status, BMI, fill = BMI_status))+
+  geom_boxplot()+
+  theme_minimal()+
+  theme(legend.position="none")
+```
+```{r}
+summary(data_cleaned)
+```
+
+```{r}
+#delete weight, height and BMI column from data frame.
+data_cleaned <- data_cleaned %>% dplyr::select(-weight_kg, -height_cm, -BMI)
+```
+
+```{r}
+#check N/A
+colSums(is.na(data_cleaned)) 
+```
+```{r}
+
+
+data_cleaned$gender <- as.character(data_cleaned$gender)
+data_cleaned$class <- as.character(data_cleaned$class)
+data_cleaned$BMI_status <- as.character(data_cleaned$BMI_status)
+#Changing several data type and information
+data_cleaned$gender[data_cleaned$gender=="M"]<-"0"
+data_cleaned$gender[data_cleaned$gender=="F"]<-"1"
+data_cleaned$class[data_cleaned$class=="A"]<-"0"
+data_cleaned$class[data_cleaned$class=="B"]<-"1"
+data_cleaned$class[data_cleaned$class=="C"]<-"2"
+data_cleaned$class[data_cleaned$class=="D"]<-"3"
+data_cleaned$BMI_status[data_cleaned$BMI_status=="Underweight"]<- "0"
+data_cleaned$BMI_status[data_cleaned$BMI_status=="Healthy"]<- "1"
+data_cleaned$BMI_status[data_cleaned$BMI_status=="Overweight"]<- "2"
+data_cleaned$BMI_status[data_cleaned$BMI_status=="Obese"]<- "3"
+
+data_cleaned <- data_cleaned %>% mutate_if(is.character, as.factor)
+
+# Lọc các dòng có 'class' bằng 0 (df_accepted)
+df_accepted <- data_cleaned[data_cleaned$class == 0, ]
+
+# Loại bỏ các dòng có 'class' bằng 0 (df_denied)
+df_denied <- data_cleaned[!(data_cleaned$class == 0), ]
+
+# Cập nhật lại giá trị của cột 'class' thành 1 trong df_denied
+df_denied$class <- 1
+
+# Thêm 3318 dòng từ df_denied vào df_accepted
+data_cleaned_1 <- rbind(df_accepted, head(df_denied, 3318))
+
+# Trộn ngẫu nhiên các dòng trong df2
+data_cleaned_1 <- data_cleaned_1[sample(nrow(data_cleaned_1)), ]
+
+
+data_cleaned_1 <- data_cleaned_1[, !(names(data_cleaned_1) %in% c("age", "gender"))]
+```
+
+```{r}
+calculate_map <- function(data, diastolic, systolic) {
+  # Kiểm tra các cột có tồn tại trong dữ liệu
+  if (!(diastolic %in% names(data)) || !(systolic %in% names(data))) {
+    stop("Cột diastolic hoặc systolic không tồn tại trong dữ liệu.")
+  }
+
+  data$MAP <- data[[diastolic]] + (data[[systolic]] - data[[diastolic]]) / 3
+  return(data)
+}
+
+data_cleaned_1 <- calculate_map(data_cleaned_1, "diastolic", "systolic")
+```
+
+```{r}
+#check dataframe performance
+glimpse(data_cleaned_1)
+```
+```{r}
+# checking proportion of target variable
+prop.table(table(data_cleaned$class))
+```
+```{r}
+table(data_cleaned_1$class)
+```
+```{r}
+# Chia dữ liệu thành tập huấn luyện (80%) và tập kiểm tra (20%)
+set.seed(120)
+index <- initial_split(data_cleaned_1, prop = 0.8, strata = "class")
+data_train <- training(index)
+data_test <- testing(index)
+data_train$class <- droplevels(data_train$class)
+```
+```{r}
+#Create Random Forest Model
+model_rf_1 <- randomForest(class ~ body_fat_percent+ grip_force + sit_and_bend_forward_cm + sit_ups_counts +broad_jump_cm +BMI_status + MAP, 
+                         data = data_train, 
+                         importance = TRUE,
+                         ntree = 500)
+model_rf_1
+```
+```{r}
+#predicttion using Random Forest model in training data
+data_mod1 <- predict(model_rf_1, 
+                    newdata = data_test)
+```
+
+```{r}
+#Confusion matrix result
+confusionMatrix(data = data_mod1,
+                reference = data_test$class)
+```
+
+```{r}
+set.seed(123)
+
+trainIndex <- createDataPartition(data_cleaned_1$class, p = 0.8, list = FALSE)
+trainData <- data_cleaned_1[trainIndex, ]
+testData <- data_cleaned_1[-trainIndex, ]
+str(trainData)
+model <- nnet::multinom(class ~body_fat_percent+ grip_force + sit_and_bend_forward_cm + sit_ups_counts +broad_jump_cm +BMI_status + MAP, 
+                  data = trainData)
+
+# Hiển thị tóm tắt mô hình
+summary(model)
+
+# Bước 5: Dự đoán và đánh giá mô hình
+predictions <- predict(model, newdata = testData)
+
+# Tạo ma trận nhầm lẫn và tính độ chính xác
+conf_mat <- confusionMatrix(predictions, testData$class)
+print(conf_mat)
+
+# Độ chính xác
+accuracy <- conf_mat$overall["Accuracy"]
+print(paste("Accuracy:", accuracy))
+
+```
